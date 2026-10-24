@@ -1,0 +1,4 @@
+index=sample sourcetype=sendmail
+| rex field=_raw "to=<(?<recipient_email>.*?)>"
+| stats count by recipient_email
+| where count > 1000

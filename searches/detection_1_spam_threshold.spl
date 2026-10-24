@@ -1,0 +1,4 @@
+index=sample sourcetype=sendmail "identified spam"
+| rex field=_raw "for (?<spam_user>[^:]+):"
+| stats count by spam_user
+| where count > 50

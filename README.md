@@ -1,36 +1,61 @@
 # Splunk Detection Lab
 
-## Overview
-This repository contains my hands-on lab work for Splunk SPL (Search Processing Language). I set up Splunk Enterprise (Free version) locally, loaded sample email server logs (57,912 events), and wrote SPL queries to analyze the data for SOC operations.
+Hands-on Splunk SPL lab for SOC operations: log parsing with regex, aggregation, and threshold-based detections on mail server logs.
 
-## Lab Setup
-- **Tool:** Splunk Enterprise 9.x (Free License)
-- **Data Source:** Sample mail server logs (sendmail sourcetype)
-- **Total Events:** 57,912
+## Lab setup
+
+- Tool: Splunk 4.1.1 (free license), running locally on Windows
+- Dataset: Splunk's built-in sample data (`sample_app\logs\maillog`), loaded into `index=sample`
+- Sourcetype: `sendmail`, 57,912 events (March 29 to April 8, 2010)
+- Credit: sample dataset provided by Splunk for learning purposes
+- Note: time range must be set to "All time", since the events are from 2010
 
 ## Searches
 
-### 1. Basic Event Count
-- **File:** `searches/basic_count.spl`
-- **Query:** `index=* | stats count`
-- **Purpose:** To calculate the total number of indexed events. This is the foundation of understanding data volume before writing detections.
+| File | Purpose |
+|------|---------|
+| `searches/basic_count.spl` | Total event count |
+| `searches/spam_filter.spl` | Count of events containing "spam" |
+| `searches/extract_recipients.spl` | Extract recipients with `rex`, rank by volume |
+| `searches/search_1_sender_timechart.spl` | Hourly mail volume per sender (`timechart`) |
 
-### 2. Filtering Spam Events
-- **File:** `searches/spam_filter.spl`
-- **Query:** `index=* spam | stats count`
-- **Purpose:** To filter raw events for the keyword "spam" and count the matching events. This helps in identifying the volume of malicious or unwanted traffic.
+## Detections
 
-### 3. Extracting Email Recipients via Regex (Advanced)
-- **File:** `searches/extract_recipients.spl`
-- **Query:** `index=* sourcetype=sendmail | rex field=_raw "to=<(?<recipient_email>.*?)>" | stats count by recipient_email | sort -count`
-- **Purpose:** Uses regex (`rex` command) to parse unstructured raw email logs to extract recipient email addresses. Then aggregates the count to find the most targeted users (potential victims of a phishing/spam campaign).
-- **Troubleshooting Note:** Initially, a broad search caused the `rex` command to drop all events that didn't contain the email format. I fixed this by filtering by `sourcetype=sendmail` first, ensuring the regex only ran on relevant logs.
+### Detection 1: Spam volume per user
+File: `searches/detection_1_spam_threshold.spl`
+
+    index=sample sourcetype=sendmail "identified spam"
+    | rex field=_raw "for (?<spam_user>[^:]+):"
+    | stats count by spam_user
+    | where count > 50
+
+Counts SpamAssassin (`spamd`) "identified spam" log lines per user and alerts when a user crosses 50. Related ATT&CK technique: T1566 (Phishing). This rule flags spam volume only, not malicious content.
+
+### Detection 2: Possible mail bombing
+File: `searches/detection_2_mail_bombing.spl`
+
+    index=sample sourcetype=sendmail
+    | rex field=_raw "to=<(?<recipient_email>.*?)>"
+    | stats count by recipient_email
+    | where count > 1000
+
+Alerts when one recipient appears in more than 1000 delivery log lines. Related ATT&CK technique: T1499 (Endpoint Denial of Service).
 
 ## Findings
-- Top targeted recipient: `spamme@splunkit.com` with 3,318 sendmail log events.
-- Other recipients: `root@splunk3.splunkit.com` (752), `mark@splunk.com` (247), `splunk@localhost` (247).
+
+- Top sender by log lines: `spammer@spamdomain.com` (2,969)
+- Detection 1 fires for user `spamme` (2,649 spam identifications)
+- Detection 2 fires for `spamme@splunkit.com` (3,318 log events); the next recipient has 752
+- Counts are sendmail log lines, not unique emails
+
+## Lessons learned
+
+- A search that returns no events is not a working detection: the first spam rule used a `from=` pattern, but the spam log lines come from `spamd` and have no sender field, so it returned nothing. I rewrote it around the `spamd` log format.
+- Always check the real index and sourcetype first (`index=sample`, not `index=main`).
+- Threshold values (50 and 1000) were chosen from this dataset and should be tuned per environment.
 
 ## Roadmap
-- [ ] Break results down by sender and time (`timechart`)
-- [ ] Add detection searches for suspicious patterns
-- [ ] Document findings with screenshots
+
+- [ ] Add screenshots of results
+- [ ] Add more detections (failed delivery spikes, unusual sender domains)
+- [ ] Map detections to a fuller ATT&CK matrix
