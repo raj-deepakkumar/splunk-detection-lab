@@ -1,1 +1,0 @@
-index=* spam | stats count

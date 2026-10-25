@@ -2,26 +2,22 @@
 
 Hands-on Splunk SPL lab for SOC operations: log parsing with regex, aggregation, and threshold-based detections on mail server logs.
 
-## Lab setup
+## Dataset Source
 
+- Data: Splunk's built-in sample data (`sample_app\logs\maillog` and `maillog.1`). Credit to Splunk for providing this dataset for learning purposes.
+- Loaded into `index=sample`, sourcetype `sendmail`: 57,912 events from March 29 to April 8, 2010 (set the time range to "All time")
 - Tool: Splunk 4.1.1 (free license), running locally on Windows
-- Dataset: Splunk's built-in sample data (`sample_app\logs\maillog`), loaded into `index=sample`
-- Sourcetype: `sendmail`, 57,912 events (March 29 to April 8, 2010)
-- Credit: sample dataset provided by Splunk for learning purposes
-- Note: time range must be set to "All time", since the events are from 2010
+- Note on indexes: every search here names its index and sourcetype instead of using `index=*`. In a real environment, data lives in dedicated indexes (for example an email security index), which keeps searches fast and reduces noise.
 
 ## Searches
 
-| File | Purpose |
-|------|---------|
-| `searches/basic_count.spl` | Total event count |
-| `searches/spam_filter.spl` | Count of events containing "spam" |
-| `searches/extract_recipients.spl` | Extract recipients with `rex`, rank by volume |
-| `searches/search_1_sender_timechart.spl` | Hourly mail volume per sender (`timechart`) |
+- `searches/extract_recipients.spl`: extracts recipient addresses with `rex` and ranks them by log volume
+- `searches/search_1_sender_timechart.spl`: hourly mail volume for the top 5 senders (`timechart`)
 
 ## Detections
 
 ### Detection 1: Spam volume per user
+
 File: `searches/detection_1_spam_threshold.spl`
 
     index=sample sourcetype=sendmail "identified spam"
@@ -29,9 +25,10 @@ File: `searches/detection_1_spam_threshold.spl`
     | stats count by spam_user
     | where count > 50
 
-Counts SpamAssassin (`spamd`) "identified spam" log lines per user and alerts when a user crosses 50. Related ATT&CK technique: T1566 (Phishing). This rule flags spam volume only, not malicious content.
+Counts SpamAssassin (`spamd`) "identified spam" log lines per user and alerts when a user crosses 50.
 
 ### Detection 2: Possible mail bombing
+
 File: `searches/detection_2_mail_bombing.spl`
 
     index=sample sourcetype=sendmail
@@ -39,7 +36,14 @@ File: `searches/detection_2_mail_bombing.spl`
     | stats count by recipient_email
     | where count > 1000
 
-Alerts when one recipient appears in more than 1000 delivery log lines. Related ATT&CK technique: T1499 (Endpoint Denial of Service).
+Alerts when one recipient appears in more than 1000 delivery log lines.
+
+## MITRE ATT&CK Mapping
+
+| Detection | Related technique | Note |
+|-----------|-------------------|------|
+| Detection 1: spam volume | T1566 Phishing | Flags spam volume only, not malicious links or attachments |
+| Detection 2: mail bombing | T1499 Endpoint Denial of Service | Flooding of one mailbox with delivery events |
 
 ## Findings
 

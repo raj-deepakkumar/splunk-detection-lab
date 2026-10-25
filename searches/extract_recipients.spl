@@ -1,1 +1,1 @@
-index=* sourcetype=sendmail | rex field=_raw "to=<(?<recipient_email>.*?)>" | stats count by recipient_email | sort -count
+index=sample sourcetype=sendmail | rex field=_raw "to=<(?<recipient_email>.*?)>" | stats count by recipient_email | sort -count
